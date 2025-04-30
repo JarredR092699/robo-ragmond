@@ -11,3 +11,9 @@ wheels/
 
 # env variables
 .env
+
+# crenditals
+credentials.json
+
+# chroma db
+chroma_db/
