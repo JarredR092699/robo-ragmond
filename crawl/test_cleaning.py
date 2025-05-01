@@ -9,6 +9,7 @@ This script:
 
 # --- Imports ---
 import asyncio
+import os
 import re
 from datetime import datetime
 from typing import Optional
@@ -17,6 +18,7 @@ from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from chromadb import errors as chromadb_errors
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
 import torch
 
 # Import Crawl4AI components
@@ -28,6 +30,10 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 CHROMA_DB_DIR = "./chroma_db"  # Where to store the ChromaDB database
 COLLECTION_NAME = "rays_website_content"
 
+
+# --- Load Environment Variables ---
+load_dotenv()
+
 # --- Core Functions ---
 def initialize_chromadb():
     """
@@ -38,18 +44,18 @@ def initialize_chromadb():
     client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
     
     # Initialize the BGE embedding model
-    bge_embedding = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="BAAI/bge-large-en-v1.5",
-        device="cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
+    huggingface_ef = embedding_functions.HuggingFaceEmbeddingFunction(
+        api_key = os.getenv("HUGGINGFACE_API_KEY"),
+        model_name = "gemini-embedding-exp-03-07"
     )
     
-    collection_name = f"{COLLECTION_NAME}_bge"  # Add suffix to differentiate from default embeddings
+    collection_name = f"{COLLECTION_NAME}_gem"  # Add suffix to differentiate from default embeddings
     
     try:
         # Try to get existing collection
         collection = client.get_collection(
             name=collection_name,
-            embedding_function=bge_embedding
+            embedding_function=huggingface_ef
         )
         print(f"Using existing collection: {collection_name}")
         
@@ -59,7 +65,7 @@ def initialize_chromadb():
         try:
             collection = client.create_collection(
                 name=collection_name,
-                embedding_function=bge_embedding,
+                embedding_function=huggingface_ef,
                 metadata={"hnsw:space": "cosine"}  # Use cosine similarity for better matching
             )
         except ValueError as e:
