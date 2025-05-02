@@ -1,0 +1,129 @@
+"""
+Rays RAG (Retrieval Augmented Generation) Implementation
+This module:
+1. Connects to our existing ChromaDB vectorstore
+2. Implements a RAG pipeline to answer questions about Rays tickets and stadium information
+3. Uses LangChain for the RAG implementation
+"""
+
+from typing import List, Dict, Any
+import chromadb
+from chromadb.config import Settings
+from chromadb.utils import embedding_functions
+import torch
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_anthropic import ChatAnthropic
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+
+# Configuration
+CHROMA_DB_DIR = "./chroma_db"
+COLLECTION_NAME = "rays_website_content_bge"
+
+class RaysRAG:
+    """
+    RAG implementation for answering questions about Rays tickets and stadium information.
+    """
+    
+    def __init__(self):
+        """Initialize the RAG components."""
+        # Initialize ChromaDB client and collection
+        self.client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
+        
+        # Initialize the BGE embedding model (same as in test_cleaning.py)
+        self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="BAAI/bge-large-en-v1.5",
+            device="cuda" if torch.cuda.is_available() else "cpu"
+        )
+        
+        # Get the existing collection
+        self.collection = self.client.get_collection(
+            name=COLLECTION_NAME,
+            embedding_function=self.embedding_function
+        )
+        
+        # Initialize LLM
+        self.llm = ChatAnthropic(
+            temperature=0.1,  # Low temperature for more focused answers
+            model="claude-3-5-sonnet-20240620"  # Using GPT-4 for better comprehension
+        )
+        
+        # Create the RAG prompt
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a helpful assistant for the Tampa Bay Rays baseball team. 
+            Your role is to provide accurate information about tickets, stadium facilities, and game day experiences.
+            Use the following pieces of context to answer the question. If it makes sense, provide a link to the source you are referring to.
+            If you don't know the answer, just say that you don't know. DO NOT make up any information.
+            Always maintain a friendly and professional tone.
+            
+            Context: {context}"""),
+            ("human", "{question}")
+        ])
+        
+        # Create the RAG chain
+        self.setup_rag_chain()
+    
+    def setup_rag_chain(self):
+        """Set up the RAG retrieval and generation chain."""
+        # Define the retrieval function
+        def retrieve_docs(query: str) -> List[str]:
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=4,  # Retrieve top 4 most relevant chunks
+                include=['documents', 'metadatas', 'distances']
+            )
+            return results['documents'][0]  # Return list of document texts
+        
+        # Create the RAG chain
+        self.chain = (
+            {"context": retrieve_docs, "question": RunnablePassthrough()}
+            | self.prompt
+            | self.llm
+            | StrOutputParser()
+        )
+    
+    def ask(self, question: str) -> str:
+        """
+        Ask a question and get a response using the RAG system.
+        
+        Args:
+            question (str): The question about Rays tickets or stadium information
+            
+        Returns:
+            str: The generated answer based on the retrieved context
+        """
+        try:
+            response = self.chain.invoke(question)
+            return response
+        except Exception as e:
+            return f"Sorry, I encountered an error while processing your question: {str(e)}"
+
+def main():
+    """Main function to test the RAG implementation."""
+    # Initialize the RAG system
+    rag = RaysRAG()
+    
+    # Test questions
+    test_questions = [
+        "What are the ticket specials available?",
+        "Tell me about parking at the stadium",
+        "What food options are available at the stadium?",
+        "Are there any student discounts for tickets?",
+        "How can I get season tickets?"
+    ]
+    
+    # Test each question
+    print("\n=== Testing RAG System ===")
+    for question in test_questions:
+        print(f"\nQ: {question}")
+        answer = rag.ask(question)
+        print(f"A: {answer}")
+        print("-" * 80)
+
+if __name__ == "__main__":
+    main() 

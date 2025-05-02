@@ -32,6 +32,9 @@ COLLECTION_NAME = "rays_website_content"
 CONTENT_DIR = "./content"  # Directory to store markdown files
 RAW_CONTENT_FILE = os.path.join(CONTENT_DIR, "rays_content_raw.md")
 
+# --- Load Environment Variables ---
+load_dotenv()
+
 # --- Core Functions ---
 def initialize_chromadb():
     """
