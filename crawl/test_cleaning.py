@@ -8,10 +8,12 @@ This script:
 """
 
 # --- Imports ---
+import os 
 import asyncio
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
+from dotenv import load_dotenv
 import chromadb
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
@@ -27,6 +29,8 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 # --- Configuration ---
 CHROMA_DB_DIR = "./chroma_db"  # Where to store the ChromaDB database
 COLLECTION_NAME = "rays_website_content"
+CONTENT_DIR = "./content"  # Directory to store markdown files
+RAW_CONTENT_FILE = os.path.join(CONTENT_DIR, "rays_content_raw.md")
 
 # --- Core Functions ---
 def initialize_chromadb():
@@ -37,19 +41,19 @@ def initialize_chromadb():
     # Initialize the client with persistence
     client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
     
-    # Initialize the BGE embedding model
-    bge_embedding = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="BAAI/bge-large-en-v1.5",
+    # Initialize the embedding model to run locally
+    st_embedding = embedding_functions.SentenceTransformerEmbeddingFunction(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
         device="cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
     )
     
-    collection_name = f"{COLLECTION_NAME}_bge"  # Add suffix to differentiate from default embeddings
+    collection_name = f"{COLLECTION_NAME}_st"  # Add suffix to differentiate from default embeddings
     
     try:
         # Try to get existing collection
         collection = client.get_collection(
             name=collection_name,
-            embedding_function=bge_embedding
+            embedding_function=st_embedding
         )
         print(f"Using existing collection: {collection_name}")
         
@@ -59,7 +63,7 @@ def initialize_chromadb():
         try:
             collection = client.create_collection(
                 name=collection_name,
-                embedding_function=bge_embedding,
+                embedding_function=st_embedding,
                 metadata={"hnsw:space": "cosine"}  # Use cosine similarity for better matching
             )
         except ValueError as e:
@@ -76,7 +80,7 @@ def initialize_chromadb():
                     client.delete_collection(collection_name)
                     collection = client.create_collection(
                         name=collection_name,
-                        embedding_function=bge_embedding,
+                        embedding_function=st_embedding,
                         metadata={"hnsw:space": "cosine"}
                     )
                 else:
@@ -84,7 +88,7 @@ def initialize_chromadb():
                     print(f"Creating new collection: {new_name}")
                     collection = client.create_collection(
                         name=new_name,
-                        embedding_function=bge_embedding,
+                        embedding_function=st_embedding,
                         metadata={"hnsw:space": "cosine"}
                     )
             else:
@@ -247,8 +251,8 @@ def test_chromadb_retrieval():
     
     # Test queries with different types of questions
     test_queries = [
-        "What are the ticket specials?",
-        "Tell me about parking at the stadium",
+        "Can I bring a broom to the stadium?",
+        "Who do the Rays play May 7th",
         "Where can I find information about season tickets?",
         "What food options are available?",
         "Are there any student discounts?"
@@ -301,6 +305,42 @@ def test_chromadb_retrieval():
         print(f"Query 2: {query2}")
         print(f"Distance between results: {abs(results1['distances'][0][0] - results2['distances'][0][0]):.4f}")
 
+def save_content_to_markdown(url_content_map: Dict[str, str]):
+    """
+    Save all crawled content to a single markdown file with proper formatting and metadata.
+    
+    Args:
+        url_content_map: Dictionary mapping URLs to their raw content
+    """
+    os.makedirs(CONTENT_DIR, exist_ok=True)
+    
+    with open(RAW_CONTENT_FILE, 'w', encoding='utf-8') as f:
+        # Write header
+        f.write("# Tampa Bay Rays Website Content\n\n")
+        f.write(f"*Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
+        f.write("This document contains raw content crawled from various Tampa Bay Rays website pages.\n\n")
+        f.write("## Table of Contents\n\n")
+        
+        # Generate table of contents
+        for url in url_content_map.keys():
+            page_title = url.split('/')[-1].replace('-', ' ').title()
+            anchor = url.split('/')[-1].lower()
+            f.write(f"- [{page_title}](#{anchor})\n")
+        
+        f.write("\n---\n\n")
+        
+        # Write content for each URL
+        for url, content in url_content_map.items():
+            page_title = url.split('/')[-1].replace('-', ' ').title()
+            f.write(f"## {page_title}\n\n")
+            f.write(f"**Source URL:** {url}\n\n")
+            f.write(f"**Crawled Length:** {len(content)} characters\n\n")
+            f.write("### Content:\n\n")
+            f.write(content)
+            f.write("\n\n---\n\n")
+    
+    print(f"\nRaw content saved to: {RAW_CONTENT_FILE}")
+
 # --- Main Execution ---
 async def main():
     """Main function to crawl URLs and store in ChromaDB."""
@@ -323,6 +363,9 @@ async def main():
     
     print("Starting content collection and storage process...")
     
+    # Dictionary to store raw content for each URL
+    url_content_map = {}
+    
     # Process each URL
     for url in urls_to_crawl:
         print(f"\nProcessing URL: {url}")
@@ -332,6 +375,9 @@ async def main():
             content = await crawl_and_get_content(url)
             
             if content:
+                # Store raw content in our map
+                url_content_map[url] = content
+                
                 # Process content into chunks
                 chunks = process_content_for_chromadb(content, url)
                 
@@ -362,6 +408,9 @@ async def main():
         except Exception as e:
             print(f"Error processing {url}: {str(e)}")
             continue
+    
+    # Save all raw content to markdown file
+    save_content_to_markdown(url_content_map)
     
     print("\nContent collection and storage complete!")
     
