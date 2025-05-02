@@ -39,8 +39,8 @@ TEST_QUERIES = [
 ]
 
 SIMILARITY_TEST_PAIRS = [
-    ("How much are tickets?", "What is the ticket pricing?"),
-    ("Where can I park?", "What are the parking options?"),
+    ("How much are tickets?", "Where can I park?"),
+    ("Where can I park?", "Can I bring a broom to the stadium?"),
     ("Food at the stadium", "What concessions are available?")
 ]
 
@@ -101,9 +101,7 @@ async def main():
     # Step 4: Test queries
     print("\n=== Testing Queries ===")
     for query in TEST_QUERIES:
-        print(f"\nQuery: {query}")
         results = vector_store.query([query])
-        
         # Format and display results
         print(md_gen.format_query_results(query, results))
     
