@@ -11,6 +11,10 @@ from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from chromadb import errors as chromadb_errors
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class RaysVectorStore:
     """Vector store class for managing content embeddings and retrieval."""
@@ -18,8 +22,7 @@ class RaysVectorStore:
     def __init__(
         self,
         persist_dir: str,
-        collection_name: str,
-        embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+        collection_name: str
     ):
         """
         Initialize the vector store.
@@ -27,11 +30,9 @@ class RaysVectorStore:
         Args:
             persist_dir: Directory to persist ChromaDB data
             collection_name: Name of the collection to use
-            embedding_model_name: Name of the sentence transformer model to use
         """
         self.persist_dir = persist_dir
-        self.collection_name = f"{collection_name}_st"  # Add suffix for sentence transformer
-        self.embedding_model_name = embedding_model_name
+        self.collection_name = collection_name
         
         # Ensure persistence directory exists
         os.makedirs(persist_dir, exist_ok=True)
@@ -47,10 +48,9 @@ class RaysVectorStore:
         Returns:
             chromadb.Collection: The initialized collection
         """
-        # Initialize the embedding model to run locally
+        # Use sentence-transformers for better embeddings
         embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=self.embedding_model_name,
-            device="cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
+            model_name="multi-qa-MiniLM-L6-cos-v1"
         )
         
         try:
@@ -180,6 +180,7 @@ class RaysVectorStore:
         """
         results = []
         for query1, query2 in query_pairs:
+<<<<<<< HEAD
             results1 = self.query([query1], n_results=1)
             results2 = self.query([query2], n_results=1)
             
@@ -197,5 +198,55 @@ class RaysVectorStore:
                     "query2": results2['distances'][0][0]
                 }
             })
+=======
+            try:
+                # Get embeddings for both queries
+                results1 = self.query([query1], n_results=1)
+                results2 = self.query([query2], n_results=1)
+                
+                # Check if we got any results for either query
+                if not results1['distances'] or not results2['distances']:
+                    results.append({
+                        "query1": query1,
+                        "query2": query2,
+                        "similarity_score": 0.0,
+                        "distances": {
+                            "query1": None,
+                            "query2": None
+                        },
+                        "error": "No results found for one or both queries"
+                    })
+                    continue
+                
+                # Calculate similarity using cosine distance
+                # ChromaDB returns cosine distances, where 0 means identical
+                # and 2 means completely different
+                distance1 = results1['distances'][0][0]
+                distance2 = results2['distances'][0][0]
+                
+                # Convert distances to similarity score (0 to 1)
+                similarity_score = 1 - (distance1 + distance2) / 2
+                
+                results.append({
+                    "query1": query1,
+                    "query2": query2,
+                    "similarity_score": similarity_score,
+                    "distances": {
+                        "query1": distance1,
+                        "query2": distance2
+                    }
+                })
+            except Exception as e:
+                results.append({
+                    "query1": query1,
+                    "query2": query2,
+                    "similarity_score": 0.0,
+                    "distances": {
+                        "query1": None,
+                        "query2": None
+                    },
+                    "error": str(e)
+                })
+>>>>>>> 9f409c6c16ead371dad9e9c42001b9af918c1478
         
         return results 
