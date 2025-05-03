@@ -45,10 +45,7 @@ def initialize_chromadb():
     client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
     
     # Initialize the embedding model to run locally
-    st_embedding = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        device="cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
-    )
+    st_embedding = embedding_functions.DefaultEmbeddingFunction()
     
     collection_name = f"{COLLECTION_NAME}_st"  # Add suffix to differentiate from default embeddings
     

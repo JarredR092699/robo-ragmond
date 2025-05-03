@@ -8,7 +8,7 @@ setup(
     name="robo-ragmond",
     version="0.1.0",
     description="RAG system for Tampa Bay Rays content",
-    author="Your Name",
+    author="Jarred Robidoux",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[
@@ -17,6 +17,8 @@ setup(
         "sentence-transformers",
         "torch",
         "python-dotenv",
+        "langchain-core", 
+        "langchain-anthropic"
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.9",
 ) 
