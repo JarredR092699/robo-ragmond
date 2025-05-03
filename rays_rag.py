@@ -41,11 +41,16 @@ class RaysRAG:
             device="cuda" if torch.cuda.is_available() else "cpu"
         )
         
-        # Get the existing collection
-        self.collection = self.client.get_collection(
-            name=COLLECTION_NAME,
-            embedding_function=self.embedding_function
-        )
+        try:
+            self.collection = self.client.get_collection(
+                name=COLLECTION_NAME,
+                embedding_function=self.embedding_function
+            )
+        except chromadb.errors.NotFoundError:
+            self.collection = self.client.create_collection(
+                name=COLLECTION_NAME,
+                embedding_function=self.embedding_function
+            )
         
         # Initialize LLM
         self.llm = ChatAnthropic(
