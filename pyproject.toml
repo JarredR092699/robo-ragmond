@@ -3,7 +3,7 @@ name = "robo-ragmond"
 version = "0.1.0"
 description = "A RAG-based customer support chatbot for Tampa Bay Rays"
 readme = "README.md"
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.12,<3.13"
 authors = [
     {name = "Jarred Robidoux & Yuki Taketani"}
 ]
