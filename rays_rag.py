@@ -22,7 +22,6 @@ import os
 load_dotenv()
 
 # Configuration
-CHROMA_DB_DIR = "./chroma_db"
 COLLECTION_NAME = "rays_website_content_bge"
 
 class RaysRAG:
@@ -32,13 +31,13 @@ class RaysRAG:
     
     def __init__(self):
         """Initialize the RAG components."""
-        # Initialize ChromaDB client and collection
-        self.client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
+        # Use in-memory ChromaDB client for Streamlit Cloud
+        self.client = chromadb.EphemeralClient()
         
-        # Initialize the BGE embedding model (same as in test_cleaning.py)
+        # Always use CPU for embeddings on Streamlit Cloud
         self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="BAAI/bge-large-en-v1.5",
-            device="cuda" if torch.cuda.is_available() else "cpu"
+            device="cpu"
         )
         
         try:
@@ -51,6 +50,7 @@ class RaysRAG:
                 name=COLLECTION_NAME,
                 embedding_function=self.embedding_function
             )
+            # TODO: Add code here to populate the collection with your documents!
         
         # Initialize LLM
         self.llm = ChatAnthropic(

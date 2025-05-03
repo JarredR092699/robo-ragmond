@@ -19,26 +19,17 @@ load_dotenv()
 class RaysVectorStore:
     """Vector store class for managing content embeddings and retrieval."""
     
-    def __init__(
-        self,
-        persist_dir: str,
-        collection_name: str
-    ):
+    def __init__(self, collection_name: str):
         """
         Initialize the vector store.
         
         Args:
-            persist_dir: Directory to persist ChromaDB data
             collection_name: Name of the collection to use
         """
-        self.persist_dir = persist_dir
         self.collection_name = collection_name
         
-        # Ensure persistence directory exists
-        os.makedirs(persist_dir, exist_ok=True)
-        
-        # Initialize client and collection
-        self.client = chromadb.PersistentClient(path=persist_dir)
+        # Initialize ephemeral client (in-memory)
+        self.client = chromadb.EphemeralClient()
         self.collection = self._initialize_collection()
     
     def _initialize_collection(self):
