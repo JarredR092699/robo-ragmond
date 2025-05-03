@@ -17,6 +17,9 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from dotenv import load_dotenv
 import os
+from src.rag.processing.cleaner import ContentCleaner
+from src.rag.processing.chunker import ContentChunker
+import re
 
 # Load environment variables
 load_dotenv()
@@ -50,7 +53,8 @@ class RaysRAG:
                 name=COLLECTION_NAME,
                 embedding_function=self.embedding_function
             )
-            # TODO: Add code here to populate the collection with your documents!
+            # Parse markdown and populate collection
+            self._populate_collection_from_markdown()
         
         # Initialize LLM
         self.llm = ChatAnthropic(
@@ -60,18 +64,58 @@ class RaysRAG:
         
         # Create the RAG prompt
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a helpful assistant for the Tampa Bay Rays baseball team. 
-            Your role is to provide accurate information about tickets, stadium facilities, and game day experiences.
-            Use the following pieces of context to answer the question. If it makes sense, provide a link to the source you are referring to.
-            If you don't know the answer, just say that you don't know. DO NOT make up any information.
-            Always maintain a friendly and professional tone.
-            
-            Context: {context}"""),
+            ("system", """You are a helpful assistant for the Tampa Bay Rays baseball team. \
+            Your role is to provide accurate information about tickets, stadium facilities, and game day experiences.\
+            Use the following pieces of context to answer the question. If it makes sense, provide a link to the source you are referring to.\
+            If you don't know the answer, just say that you don't know. DO NOT make up any information.\
+            Always maintain a friendly and professional tone.\
+            \n            Context: {context}"""),
             ("human", "{question}")
         ])
         
         # Create the RAG chain
         self.setup_rag_chain()
+    
+    def _populate_collection_from_markdown(self):
+        """
+        Parse the markdown file and populate the ChromaDB collection with cleaned, chunked content.
+        """
+        md_path = "crawl/content/rays_content_raw.md"
+        try:
+            with open(md_path, "r", encoding="utf-8") as f:
+                md_text = f.read()
+        except FileNotFoundError:
+            raise RuntimeError(f"Knowledge base markdown file not found at {md_path}")
+        if not md_text.strip():
+            raise RuntimeError(f"Knowledge base markdown file at {md_path} is empty.")
+
+        # Regex to extract sections: ## Section Name, **Source URL:**, then content until next ## or end
+        section_pattern = re.compile(r"## (.*?)\n+\*\*Source URL:\*\* (.*?)\n+.*?### Content:\n+([\s\S]*?)(?=\n## |\Z)")
+        matches = section_pattern.findall(md_text)
+        if not matches:
+            raise RuntimeError("No sections found in the markdown knowledge base.")
+
+        cleaner = ContentCleaner()
+        chunker = ContentChunker()
+        documents = []
+        metadatas = []
+        ids = []
+        for section_name, url, content in matches:
+            cleaned = cleaner.clean_content(content)
+            if not cleaned:
+                continue
+            chunks = chunker.process_content(cleaned, url)
+            for i, chunk in enumerate(chunks):
+                documents.append(chunk["text"])
+                metadatas.append(chunk["metadata"])
+                ids.append(f"{url}_{i}")
+        if not documents:
+            raise RuntimeError("No documents were parsed from the markdown knowledge base.")
+        self.collection.add(
+            documents=documents,
+            metadatas=metadatas,
+            ids=ids
+        )
     
     def setup_rag_chain(self):
         """Set up the RAG retrieval and generation chain."""
