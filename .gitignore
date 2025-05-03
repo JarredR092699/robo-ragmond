@@ -17,3 +17,11 @@ credentials.json
 
 # chroma db
 chroma_db/
+
+# token pickle
+token.pickle
+
+# streamlit cache
+.streamlit/secrets.toml
+.streamlit/secrets.toml.cache
+.streamlit/secrets.toml.cache.json

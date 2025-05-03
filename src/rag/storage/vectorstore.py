@@ -180,7 +180,6 @@ class RaysVectorStore:
         """
         results = []
         for query1, query2 in query_pairs:
-<<<<<<< HEAD
             results1 = self.query([query1], n_results=1)
             results2 = self.query([query2], n_results=1)
             
@@ -198,55 +197,5 @@ class RaysVectorStore:
                     "query2": results2['distances'][0][0]
                 }
             })
-=======
-            try:
-                # Get embeddings for both queries
-                results1 = self.query([query1], n_results=1)
-                results2 = self.query([query2], n_results=1)
-                
-                # Check if we got any results for either query
-                if not results1['distances'] or not results2['distances']:
-                    results.append({
-                        "query1": query1,
-                        "query2": query2,
-                        "similarity_score": 0.0,
-                        "distances": {
-                            "query1": None,
-                            "query2": None
-                        },
-                        "error": "No results found for one or both queries"
-                    })
-                    continue
-                
-                # Calculate similarity using cosine distance
-                # ChromaDB returns cosine distances, where 0 means identical
-                # and 2 means completely different
-                distance1 = results1['distances'][0][0]
-                distance2 = results2['distances'][0][0]
-                
-                # Convert distances to similarity score (0 to 1)
-                similarity_score = 1 - (distance1 + distance2) / 2
-                
-                results.append({
-                    "query1": query1,
-                    "query2": query2,
-                    "similarity_score": similarity_score,
-                    "distances": {
-                        "query1": distance1,
-                        "query2": distance2
-                    }
-                })
-            except Exception as e:
-                results.append({
-                    "query1": query1,
-                    "query2": query2,
-                    "similarity_score": 0.0,
-                    "distances": {
-                        "query1": None,
-                        "query2": None
-                    },
-                    "error": str(e)
-                })
->>>>>>> 9f409c6c16ead371dad9e9c42001b9af918c1478
         
         return results 
