@@ -21,6 +21,14 @@ from src.rag.processing.cleaner import ContentCleaner
 from src.rag.processing.chunker import ContentChunker
 import re
 
+try:
+    import streamlit as st
+    if "anthropic" in st.secrets and "api_key" in st.secrets["anthropic"]:
+        os.environ["ANTHROPIC_API_KEY"] = st.secrets["anthropic"]["api_key"]
+except ImportError:
+    # Not running in Streamlit, ignore
+    pass
+
 # Load environment variables
 load_dotenv()
 
