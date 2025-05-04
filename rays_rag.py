@@ -90,10 +90,19 @@ class RaysRAG:
             raise RuntimeError(f"Knowledge base markdown file at {md_path} is empty.")
 
         # Regex to extract sections: ## Section Name, **Source URL:**, then content until next ## or end
-        section_pattern = re.compile(r"## (.*?)\n+\*\*Source URL:\*\* (.*?)\n+.*?### Content:\n+([\s\S]*?)(?=\n## |\Z)")
+        section_pattern = re.compile(
+            r"^##\s+(.*?)\s*\n+"
+            r"\*\*Source URL:\*\*\s*(.*?)\s*\n+"
+            r"(?:\*\*Crawled Length:\*\*.*?\n+)?"
+            r"### Content:\s*\n+"
+            r"([\s\S]*?)(?=^## |\Z)",
+            re.MULTILINE
+        )
         matches = section_pattern.findall(md_text)
         if not matches:
             raise RuntimeError("No sections found in the markdown knowledge base.")
+
+        print(f"Found {len(matches)} sections in the markdown knowledge base.")
 
         cleaner = ContentCleaner()
         chunker = ContentChunker()
@@ -101,10 +110,15 @@ class RaysRAG:
         metadatas = []
         ids = []
         for section_name, url, content in matches:
+            print(f"\n--- Section: {section_name} | URL: {url} ---")
+            print(f"Raw content (first 200 chars): {content[:200]}")
             cleaned = cleaner.clean_content(content)
+            print(f"Cleaned content (first 200 chars): {cleaned[:200] if cleaned else 'None'}")
             if not cleaned:
+                print("Content was empty after cleaning, skipping.")
                 continue
             chunks = chunker.process_content(cleaned, url)
+            print(f"Number of chunks: {len(chunks)}")
             for i, chunk in enumerate(chunks):
                 documents.append(chunk["text"])
                 metadatas.append(chunk["metadata"])

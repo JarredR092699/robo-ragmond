@@ -409,6 +409,8 @@ async def main():
             print(f"Error processing {url}: {str(e)}")
             continue
     
+
+    print("url_content_map: ", url_content_map)
     # Save all raw content to markdown file
     save_content_to_markdown(url_content_map)
     
