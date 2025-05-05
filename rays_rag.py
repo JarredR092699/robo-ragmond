@@ -17,12 +17,22 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from dotenv import load_dotenv
 import os
+from src.rag.processing.cleaner import ContentCleaner
+from src.rag.processing.chunker import ContentChunker
+import re
+
+try:
+    import streamlit as st
+    if "anthropic" in st.secrets and "api_key" in st.secrets["anthropic"]:
+        os.environ["ANTHROPIC_API_KEY"] = st.secrets["anthropic"]["api_key"]
+except ImportError:
+    # Not running in Streamlit, ignore
+    pass
 
 # Load environment variables
 load_dotenv()
 
 # Configuration
-CHROMA_DB_DIR = "./chroma_db"
 COLLECTION_NAME = "rays_website_content_bge"
 
 class RaysRAG:
@@ -32,20 +42,27 @@ class RaysRAG:
     
     def __init__(self):
         """Initialize the RAG components."""
-        # Initialize ChromaDB client and collection
-        self.client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
+        # Use in-memory ChromaDB client for Streamlit Cloud
+        self.client = chromadb.EphemeralClient()
         
-        # Initialize the BGE embedding model (same as in test_cleaning.py)
+        # Always use CPU for embeddings on Streamlit Cloud
         self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="BAAI/bge-large-en-v1.5",
-            device="cuda" if torch.cuda.is_available() else "cpu"
+            device="cpu"
         )
         
-        # Get the existing collection
-        self.collection = self.client.get_collection(
-            name=COLLECTION_NAME,
-            embedding_function=self.embedding_function
-        )
+        try:
+            self.collection = self.client.get_collection(
+                name=COLLECTION_NAME,
+                embedding_function=self.embedding_function
+            )
+        except chromadb.errors.NotFoundError:
+            self.collection = self.client.create_collection(
+                name=COLLECTION_NAME,
+                embedding_function=self.embedding_function
+            )
+            # Parse markdown and populate collection
+            self._populate_collection_from_markdown()
         
         # Initialize LLM
         self.llm = ChatAnthropic(
@@ -68,6 +85,61 @@ class RaysRAG:
         
         # Create the RAG chain
         self.setup_rag_chain()
+    
+    def _populate_collection_from_markdown(self):
+        """
+        Parse the markdown file and populate the ChromaDB collection with cleaned, chunked content.
+        """
+        md_path = "crawl/content/rays_content_raw.md"
+        try:
+            with open(md_path, "r", encoding="utf-8") as f:
+                md_text = f.read()
+        except FileNotFoundError:
+            raise RuntimeError(f"Knowledge base markdown file not found at {md_path}")
+        if not md_text.strip():
+            raise RuntimeError(f"Knowledge base markdown file at {md_path} is empty.")
+
+        # Regex to extract sections: ## Section Name, **Source URL:**, then content until next ## or end
+        section_pattern = re.compile(
+            r"^##\s+(.*?)\s*\n+"
+            r"\*\*Source URL:\*\*\s*(.*?)\s*\n+"
+            r"(?:\*\*Crawled Length:\*\*.*?\n+)?"
+            r"### Content:\s*\n+"
+            r"([\s\S]*?)(?=^## |\Z)",
+            re.MULTILINE
+        )
+        matches = section_pattern.findall(md_text)
+        if not matches:
+            raise RuntimeError("No sections found in the markdown knowledge base.")
+
+        print(f"Found {len(matches)} sections in the markdown knowledge base.")
+
+        cleaner = ContentCleaner()
+        chunker = ContentChunker()
+        documents = []
+        metadatas = []
+        ids = []
+        for section_name, url, content in matches:
+            print(f"\n--- Section: {section_name} | URL: {url} ---")
+            print(f"Raw content (first 200 chars): {content[:200]}")
+            cleaned = cleaner.clean_content(content)
+            print(f"Cleaned content (first 200 chars): {cleaned[:200] if cleaned else 'None'}")
+            if not cleaned:
+                print("Content was empty after cleaning, skipping.")
+                continue
+            chunks = chunker.process_content(cleaned, url)
+            print(f"Number of chunks: {len(chunks)}")
+            for i, chunk in enumerate(chunks):
+                documents.append(chunk["text"])
+                metadatas.append(chunk["metadata"])
+                ids.append(f"{url}_{i}")
+        if not documents:
+            raise RuntimeError("No documents were parsed from the markdown knowledge base.")
+        self.collection.add(
+            documents=documents,
+            metadatas=metadatas,
+            ids=ids
+        )
     
     def setup_rag_chain(self):
         """Set up the RAG retrieval and generation chain."""

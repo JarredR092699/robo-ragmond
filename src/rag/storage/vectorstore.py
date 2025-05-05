@@ -19,26 +19,17 @@ load_dotenv()
 class RaysVectorStore:
     """Vector store class for managing content embeddings and retrieval."""
     
-    def __init__(
-        self,
-        persist_dir: str,
-        collection_name: str
-    ):
+    def __init__(self, collection_name: str):
         """
         Initialize the vector store.
         
         Args:
-            persist_dir: Directory to persist ChromaDB data
             collection_name: Name of the collection to use
         """
-        self.persist_dir = persist_dir
         self.collection_name = collection_name
         
-        # Ensure persistence directory exists
-        os.makedirs(persist_dir, exist_ok=True)
-        
-        # Initialize client and collection
-        self.client = chromadb.PersistentClient(path=persist_dir)
+        # Initialize ephemeral client (in-memory)
+        self.client = chromadb.EphemeralClient()
         self.collection = self._initialize_collection()
     
     def _initialize_collection(self):
@@ -121,6 +112,7 @@ class RaysVectorStore:
             metadatas=metadatas,
             ids=ids
         )
+        print(f"Added {len(documents)} documents to vector store for {self.collection_name}")
     
     def query(
         self,
@@ -141,13 +133,15 @@ class RaysVectorStore:
         Returns:
             Dict containing documents, metadatas, and distances
         """
-        return self.collection.query(
+        results = self.collection.query(
             query_texts=query_texts,
             n_results=n_results,
             where=where,
             where_document=where_document,
             include=['documents', 'metadatas', 'distances']
         )
+        print(f"Raw results for query '{query_texts[0] if query_texts else 'None'}': {results}")
+        return results
     
     def get_collection_stats(self) -> Dict[str, Any]:
         """
@@ -177,53 +171,22 @@ class RaysVectorStore:
         """
         results = []
         for query1, query2 in query_pairs:
-            try:
-                # Get embeddings for both queries
-                results1 = self.query([query1], n_results=1)
-                results2 = self.query([query2], n_results=1)
-                
-                # Check if we got any results for either query
-                if not results1['distances'] or not results2['distances']:
-                    results.append({
-                        "query1": query1,
-                        "query2": query2,
-                        "similarity_score": 0.0,
-                        "distances": {
-                            "query1": None,
-                            "query2": None
-                        },
-                        "error": "No results found for one or both queries"
-                    })
-                    continue
-                
-                # Calculate similarity using cosine distance
-                # ChromaDB returns cosine distances, where 0 means identical
-                # and 2 means completely different
-                distance1 = results1['distances'][0][0]
-                distance2 = results2['distances'][0][0]
-                
-                # Convert distances to similarity score (0 to 1)
-                similarity_score = 1 - (distance1 + distance2) / 2
-                
-                results.append({
-                    "query1": query1,
-                    "query2": query2,
-                    "similarity_score": similarity_score,
-                    "distances": {
-                        "query1": distance1,
-                        "query2": distance2
-                    }
-                })
-            except Exception as e:
-                results.append({
-                    "query1": query1,
-                    "query2": query2,
-                    "similarity_score": 0.0,
-                    "distances": {
-                        "query1": None,
-                        "query2": None
-                    },
-                    "error": str(e)
-                })
+            results1 = self.query([query1], n_results=1)
+            results2 = self.query([query2], n_results=1)
+            
+            if not results1['distances'] or not results2['distances']:
+                similarity_score = 0.0
+            else:
+                similarity_score = results1['distances'][0][0] - results2['distances'][0][0]
+            
+            results.append({
+                "query1": query1,
+                "query2": query2,
+                "similarity_score": similarity_score,
+                "distances": {
+                    "query1": results1['distances'][0][0],
+                    "query2": results2['distances'][0][0]
+                }
+            })
         
         return results 

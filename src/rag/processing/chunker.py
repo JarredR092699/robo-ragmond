@@ -13,7 +13,7 @@ class ContentChunker:
     def __init__(
         self,
         max_chunk_size: int = 512,
-        min_chunk_size: int = 100,
+        min_chunk_size: int = 10,
         overlap_size: int = 50
     ):
         """
@@ -65,11 +65,17 @@ class ContentChunker:
         current_chunk = ""
         
         # First split by headers
-        sections = self.split_by_headers(content)
+        sections = [content]
+        print(f"split_by_headers produced {len(sections)} sections")
+        for idx, sec in enumerate(sections):
+            print(f"Section {idx} (first 100 chars): {sec[:100]}")
         
         for section in sections:
             # Split section into paragraphs
             paragraphs = section.split('\n\n')
+            print(f"Section {idx} has {len(paragraphs)} paragraphs")
+            for pidx, para in enumerate(paragraphs):
+                print(f"Paragraph {pidx} (len {len(para)}): {para[:100]}")
             
             for paragraph in paragraphs:
                 if not paragraph.strip():
