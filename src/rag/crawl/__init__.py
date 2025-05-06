@@ -3,9 +3,9 @@ Crawling package for the RAG system.
 Provides functionality to crawl and extract content from websites.
 """
 
-from .crawler import RaysCrawler, crawl_rays_content
+from .crawler import RaysCrawler, get_rays_content_map
 
 __all__ = [
     'RaysCrawler',
-    'crawl_rays_content',
+    'get_rays_content_map',
 ]
